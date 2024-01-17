@@ -1,27 +1,36 @@
 import numpy as np
+from pathlib import Path
+from nilearn.image import resample_img, load_img
 from tqdm import tqdm
-from recotwix.prot_volumes import prot_volumes, volume
-from recotwix.transformation import resample
-from recotwix import recotwix
 
+
+prefix = 'pyshim_'
+standard_space_filename = prefix + 'standard_space.nii.gz'
 
 class shimming_base():
-    _shim_volume_protocol  = None
-    _shim_volume_resampled  = {'slc':volume(), 'adj':volume(), 'ptx':volume()} # just for intelicence
     _standard_space_affine = None
     _standard_space_size   = None
+    _work_directory        = None
+    _target_filenames      = None
 
-    def __init__(self, protocol=None, res=1.5, fov=300) -> None:
-        self.calc_standard_space_affine(res=res, fov=fov)
-        if protocol is not None:
-            self.set_protocol(protocol) 
+    def __init__(self, res=1.5, fov=300, work_directory=None) -> None:
+        work_directory = str(Path.home().joinpath('pyshim')) if work_directory is None else work_directory
+        self.set_work_directory(work_directory)
+        self.set_standard_space(res, fov)
+        self._target_filenames = list()
 
-    def set_protocol(self, protocol):
-        self._shim_volume_protocol = prot_volumes(protocol)
-        self._shim_volume_resliced = dict() # clear to make it for the instance of shimming_base
-        self.resample_volumes()
 
-    def calc_standard_space_affine(self, res, fov):
+    def set_work_directory(self, work_directory):
+        w_dir = Path(work_directory)
+        w_dir.mkdir(parents=True, exist_ok=True)
+        # clear folder from previous runs
+        p = w_dir.glob(prefix + '*.nii*')
+        for f in p:
+            f.unlink()
+        self._work_directory = w_dir
+
+
+    def set_standard_space(self, res, fov):
         """
         Calculate the affine transformation, defining the standard space
         res: resolution in the standard space (mm)
@@ -29,56 +38,27 @@ class shimming_base():
         """
         if fov<0 or res<0 or fov<res:
             raise ValueError('fov and res must be positive and fov must be larger than res')
+
         self._standard_space_affine = np.hstack((np.eye(4,3)*res, np.array([-fov/2,-fov/2,-fov/2,1]).reshape(4,1)))
-        self._standard_space_size = [int(x) for x in [fov/res]*3]
+        self._standard_space_size   = [int(x) for x in [fov/res]*3]
 
-    def resample_volumes(self):
+
+    def resample_to_standard_sapce(self, filenames):
         """
-        transform all shimming volumes to the stanard space
+        transform input nifti to the stanard space
+        filenames: list of nifti files
         """
-        t_affine = self._standard_space_affine
-        t_size = self._standard_space_size
-        with tqdm(total=self._shim_volume_protocol.num_volumes, desc='resample volumes') as pbar:
-            for vol_name in self._shim_volume_protocol.get_volume_names():
-                self._shim_volume_resliced[vol_name] = list()
-                for vol in self._shim_volume_protocol.get(vol_name):
-                    r = resample(vol.data(), vol.affine, target_affine=t_affine, target_size=t_size, interp_oder=5, fill_value=0)
-                    self._shim_volume_resliced[vol_name].append(r)
-                    pbar.update(1)
+        self._target_filenames = list()
+        std_affine = self._standard_space_affine
+        std_size   = self._standard_space_size
+        w_dir      = self._work_directory
+        for f in tqdm(filenames, desc='resampling to standard space'):
+            self._target_filenames.append(w_dir.joinpath(prefix + Path(f).name))
+            resample_img(load_img(f), target_affine=std_affine, target_shape=std_size).to_filename(self._target_filenames[-1])
 
 
-    def resample_image(self, image, affine):
-        """
-        transform image to the stanard space
-        """
-        t_affine = self._standard_space_affine
-        t_size = self._standard_space_size
-        return resample(image, affine, target_affine=t_affine, target_size=t_size, interp_oder=3, fill_value=0)
-    
-
-    def get_standard_space_affine(self):
-        return self._standard_space_affine
-
-    def get_shim_volume_data(self):
-        return self._shim_volume_resliced  
-    
-    def get_shim_volume_protocol(self):
-        return self._shim_volume_protocol
-
-
-class shimming(shimming_base):
-    _recotwix_obj = None
-    def __init__(self, file_twix, file_protocol=None) -> None:
-        super().__init__()
-        self._recotwix_obj = recotwix(file_twix)
-        self._recotwix_obj.runReco(method_sensitivity=None)
-        if file_protocol is not None:
-            self.set_protocol(file_protocol) 
-        else:
-            self.set_protocol(self._recotwix_obj.hdr['MeasYaps'])
-
-    def get_recotwix(self):
-        return self._recotwix_obj
+    def get_standard_space(self):
+        return self._standard_space_affine, self._standard_space_size
 
 
 

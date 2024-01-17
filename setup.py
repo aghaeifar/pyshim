@@ -17,5 +17,5 @@ setup(name='pyshim', # this will be name of package in packages list : pip list
       author_email='ali.aghaeifar [at] tuebingen.mpg [dot] de',
       license='MIT License',
       packages=['pyshim'],
-      install_requires = ['tqdm','numpy','cvxpy']
+      install_requires = ['tqdm','numpy','cvxpy', 'nibabel', 'nilearn']
      )
