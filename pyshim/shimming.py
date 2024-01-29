@@ -1,23 +1,24 @@
 import numpy as np
 from pathlib import Path
-from nilearn.image import resample_img, load_img
+import nibabel as nib
+from nibabel.processing import resample_from_to
+
 from tqdm import tqdm
 
 
 prefix = 'pyshim_'
-standard_space_filename = prefix + 'standard_space.nii.gz'
 
 class shimming_base():
     _standard_space_affine = None
     _standard_space_size   = None
     _work_directory        = None
-    _target_filenames      = None
+    _target_filenames      = list()
 
     def __init__(self, res=1.5, fov=300, work_directory=None) -> None:
         work_directory = str(Path.home().joinpath('pyshim')) if work_directory is None else work_directory
         self.set_work_directory(work_directory)
         self.set_standard_space(res, fov)
-        self._target_filenames = list()
+        self._target_filenames = None
 
 
     def set_work_directory(self, work_directory):
@@ -30,12 +31,19 @@ class shimming_base():
         self._work_directory = w_dir
 
 
-    def set_standard_space(self, res, fov):
+    def set_standard_space(self, res=1.5, fov=300, nifti_reference=None):
         """
         Calculate the affine transformation, defining the standard space
         res: resolution in the standard space (mm)
         fov: field-of-view in the standard space (mm)
+        nifti_file: nifti file defining the standard space
         """
+
+        if nifti_reference is not None and Path(nifti_reference).is_file():
+            self._standard_space_affine = nib.load(nifti_reference).affine
+            self._standard_space_size   = nib.load(nifti_reference).shape[0:3]
+            return
+        
         if fov<0 or res<0 or fov<res:
             raise ValueError('fov and res must be positive and fov must be larger than res')
 
@@ -53,8 +61,13 @@ class shimming_base():
         std_size   = self._standard_space_size
         w_dir      = self._work_directory
         for f in tqdm(filenames, desc='resampling to standard space'):
+            if not Path(f).is_file():
+                raise FileNotFoundError(f'The specified file {f} was not found.')
             self._target_filenames.append(w_dir.joinpath(prefix + Path(f).name))
-            resample_img(load_img(f), target_affine=std_affine, target_shape=std_size).to_filename(self._target_filenames[-1])
+            img = nib.load(f)
+            order = 0 if sorted(list(np.unique(img.get_fdata()))) == [0, 1] else 4
+            img_out = resample_from_to(img, (std_size, std_affine), order=order)
+            nib.save(img_out, self._target_filenames[-1])
 
 
     def get_standard_space(self):
@@ -62,14 +75,16 @@ class shimming_base():
 
 
 
-def lsqlin(a:np.ndarray, b:np.ndarray, lb:np.ndarray, ub:np.ndarray):
+def lsqlin(A:np.ndarray, b:np.ndarray, lb:np.ndarray, ub:np.ndarray):
     """
-    Solving ax = b 
+    Solving Ax = b 
     subject to lb <= x <= ub
     """
-    import cvxpy as cp
-    x = cp.Variable(len(b))
-    prob = cp.Problem(cp.Minimize(cp.sum_squares(a @ x - b)), [lb <= x, x <= ub])
-    prob.solve()
-    return x.value
+    from scipy.optimize import lsq_linear
+
+    res = lsq_linear(A, -b, bounds=(lb, ub))
+    solution = res.x
+    err = np.std(res.fun)
+    return solution, err
+
     
