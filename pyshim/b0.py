@@ -4,9 +4,6 @@ import nibabel as nib
 from . import shimming_base, lsqlin
 
 class shimming_b0(shimming_base):
-    shims_value = list()
-    initial_std = list()
-    residuals_std = list()
     def __init__(self, res=1.5, fov=300, work_directory=None) -> None:
         super().__init__(res=res, fov=fov, work_directory=work_directory)
         # if file_protocol is not None:
@@ -42,10 +39,7 @@ class shimming_b0(shimming_base):
         if shimmaps.header.get_data_shape()[3] != lb.shape[0] and shimmaps.header.get_data_shape()[3] != up.shape[0]:
             raise ValueError('shimmaps and lb/up must have the same length')
         
-        results = list()
-        self.shims_value   = list()
-        self.initial_std   = list()
-        self.residuals_std = list()
+        self._output.clear()
         for m in masks_nii:
             mask = nib.load(m)
             if b0_map.header.get_data_shape() != mask.header.get_data_shape() or not np.array_equal(mask.affine , b0_map.affine):
@@ -61,6 +55,6 @@ class shimming_b0(shimming_base):
 
             shims_value, err = lsqlin(shimmaps_data, b0_data, lb, up)
 
-            self.shims_value.append(shims_value)
-            self.residuals_std.append(err)
-            self.initial_std.append(np.std(b0_data))
+            self._output.shims.append(shims_value)
+            self._output.std_residuals.append(err)
+            self._output.std_initials.append(np.std(b0_data))

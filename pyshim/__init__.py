@@ -1,2 +1,2 @@
 from .shimming import shimming_base, lsqlin, prefix
-from .b0 import shimming_b0
+from . import b0, b1, shimming
