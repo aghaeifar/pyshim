@@ -1,6 +1,5 @@
 import numpy as np
 import nibabel as nib
-from nibabel.affines import apply_affine
 
 gamma = 2*np.pi * 42.57638474e6 # rad/sec/T
 
@@ -28,8 +27,10 @@ def create_system_matrix(b1_mag_nii, b1_phs_nii, b0_nii, mask_nii, kspace_traj:n
     b1_phs  = nib.load(b1_phs_nii)
     b0      = nib.load(b0_nii)
     mask    = nib.load(mask_nii)
+    sz      = np.array(b0.shape)
     zooms   = np.array(b0.header.get_zooms()[:3]) # nib.Nifti1Header()
-    offset  = b0.affine[:3,-1]
+    offset  = b0.affine.dot([sz[0]/2.0, sz[1]/2.0, sz[2]/2.0+0.5, 1.0]) # center of FoV. No idea where +0.5 is come from 
+    FoV     = zooms * sz
 
     # check consistency of the input data
     if not all_equal(b1_mag.header.get_data_shape()[:-1], b1_phs.header.get_data_shape()[:-1], b0.header.get_data_shape(), mask.header.get_data_shape()):
@@ -43,14 +44,13 @@ def create_system_matrix(b1_mag_nii, b1_phs_nii, b0_nii, mask_nii, kspace_traj:n
     b0      = b0.get_fdata(dtype=b0.header.get_data_dtype()).flatten()[mask]
     b1      = 1e-9 * b1_mag.get_fdata(dtype=b1_mag.header.get_data_dtype()) * np.exp(1j * b1_phs.get_fdata(dtype=b1_phs.header.get_data_dtype())) # nT/V -> T/V
 
-    sz      = b1.shape[0:3]
     nRF     = kspace_traj.shape[0]    
     nPos    = mask[0].size
     T       = np.sum(rf_len) + np.sum(rf_gap)
     # calculate spatial position of voxels 
     xv, yv, zv = np.meshgrid(np.arange(sz[0]), np.arange(sz[1]), np.arange(sz[2]), indexing='ij')
     xyz = np.column_stack((xv.flatten()[mask], yv.flatten()[mask], zv.flatten()[mask])) # we must transform RAS to gradient coordinate !!!!!!!
-    xyz = xyz * zooms + offset  # in Gradient Coordinate System (a.k.a. PRS) 
+    xyz = xyz * zooms - FoV/2 + offset  # in RAS direction
 
     A = np.zeros((nPos, nRF), dtype=b1.dtype)
     for i, traj in enumerate(kspace_traj):

@@ -1,7 +1,7 @@
 
 import numpy as np
 import nibabel as nib
-from . import opt_lsqlin
+from . import opt
 
 
 def calc_b0_shim(shimmaps_nii, b0_nii, masks_nii, lb:np.ndarray, up:np.ndarray):
@@ -35,7 +35,7 @@ def calc_b0_shim(shimmaps_nii, b0_nii, masks_nii, lb:np.ndarray, up:np.ndarray):
         b0_data = b0_data[~mask_0]
         shimmaps_data = shimmaps_data[~mask_0, :]
 
-        shims_value, err = opt_lsqlin(shimmaps_data, b0_data, lb, up)
+        shims_value, err = opt.lsqlin(shimmaps_data, b0_data, lb, up)
 
         output['shims'].append(shims_value)
         output['std_residuals'].append(err)
