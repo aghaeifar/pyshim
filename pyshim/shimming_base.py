@@ -24,9 +24,9 @@ def create_standard_space(res=1.5, fov=300, nifti_target=None):
     fov: field-of-view in the standard space (mm)
     nifti_file: nifti file defining the standard space
     """
-    if nifti_target is not None and Path(nifti_target).is_file():
-        std_affine = nib.load(nifti_target).affine
-        std_size   = nib.load(nifti_target).shape[0:3]
+    if isinstance(nifti_target, nib.nifti1.Nifti1Image):
+        std_affine = nifti_target.affine
+        std_size   = nifti_target.shape[0:3]
         return std_affine, std_size
     
     if fov<0 or res<0 or fov<res:
@@ -37,24 +37,43 @@ def create_standard_space(res=1.5, fov=300, nifti_target=None):
     return std_affine, std_size
 
 
-def resample_to_standard_sapce(filenames, std_affine, std_size, work_directory):
+def resample_to_standard_sapce(*niis, std_affine, std_size):
     """
     transform input nifti to the stanard space
-    filenames: list of nifti files
+    niis: list of nifti objects
     """
-    work_directory = Path(work_directory)
-    target_filenames = list()
-    for f in tqdm(filenames, desc='resampling to standard space'):
-        if not Path(f).is_file():
-            raise FileNotFoundError(f'The specified file {f} was not found.')
-        target_filenames.append(work_directory.joinpath(prefix + Path(f).name).as_posix())
-        img = nib.load(f)
-        
-        inter_method = 'nearest' if sorted(list(np.unique(img.get_fdata()))) == [0, 1] else 'continuous'
-        img_out = resample_img(img, std_affine, std_size, interpolation=inter_method)
-        nib.save(img_out, target_filenames[-1])
+    niis_out = list()
+    for nii_in in tqdm(niis, desc='resampling to standard space'):
+        inter_method = 'nearest' if sorted(list(np.unique(nii_in.get_fdata()))) == [0, 1] else 'continuous'
+        niis_out.append(resample_img(nii_in, std_affine, std_size, interpolation=inter_method))
+    return niis_out
 
-    return target_filenames
+
+def combine_masks(*mask_nii):   
+    nifti_arrays = []
+    for mask in mask_nii:
+        nifti_data = mask.get_fdata()
+        nifti_arrays.append(nifti_data)
+
+    return nib.Nifti1Image(np.prod(nifti_arrays, axis=0), affine=mask_nii[0].affine)
+
+
+def calculate_err(input:nib.Nifti1Image, mask:nib.Nifti1Image, calc_std=True, calc_rmse=False, target_rmse=0):
+    if np.prod(input.shape) != np.prod(mask.shape):  # input can be 4D but the last dimension must be 1
+        raise ValueError('shape mismatch')
+    
+    input = input.get_fdata(dtype=input.get_data_dtype())  
+    input = input.flatten()[np.nonzero(mask.get_fdata().flatten())]
+    if np.iscomplex(input).any():
+        input = np.abs(input)
+    
+    err = []
+    if calc_std:
+        err.append(np.std(input))
+    if calc_rmse:
+        err.append(np.sqrt(np.mean((input-target_rmse)**2)))
+    return err
+
 
 
 def write_shims(shims:list, filename):
