@@ -17,7 +17,7 @@ def set_work_directory(work_directory):
         f.unlink()
 
 
-def create_standard_space(res=1.5, fov=300, nifti_target=None):
+def create_standard_space(res=1.5, fov=300, nifti_target:nib.Nifti1Image=None):
     """
     Calculate the affine transformation, defining the standard space
     res: resolution in the standard space (mm)
@@ -49,13 +49,14 @@ def resample_to_standard_sapce(*niis, std_affine, std_size):
     return niis_out
 
 
-def combine_masks(*mask_nii):   
-    nifti_arrays = []
-    for mask in mask_nii:
-        nifti_data = mask.get_fdata()
-        nifti_arrays.append(nifti_data)
+def combine_masks(*mask_nii:nib.Nifti1Image):   
+    nifti_arrays = [mask.get_fdata() for mask in mask_nii]
+    return nib.Nifti1Image(np.prod(nifti_arrays, axis=0, dtype=np.float32), affine=mask_nii[0].affine)
 
-    return nib.Nifti1Image(np.prod(nifti_arrays, axis=0), affine=mask_nii[0].affine)
+
+def combine_nii(*nii:nib.Nifti1Image):
+    nifti_arrays = [nii_in.get_fdata() for nii_in in nii]
+    return nib.Nifti1Image(np.sum(nifti_arrays, axis=0), affine=nii[0].affine)
 
 
 def calculate_err(input:nib.Nifti1Image, mask:nib.Nifti1Image, calc_std=True, calc_rmse=False, target_rmse=0):
@@ -73,7 +74,6 @@ def calculate_err(input:nib.Nifti1Image, mask:nib.Nifti1Image, calc_std=True, ca
     if calc_rmse:
         err.append(np.sqrt(np.mean((input-target_rmse)**2)))
     return err
-
 
 
 def write_shims(shims:list, filename):
