@@ -1,6 +1,6 @@
 import numpy as np
 import nibabel as nib
-from nilearn.image import resample_img
+from nilearn.image import resample_img    
 from pathlib import Path
 from tqdm import tqdm
 
@@ -55,9 +55,12 @@ def combine_masks(*mask_nii:nib.Nifti1Image):
 
 
 def combine_nii(*nii:nib.Nifti1Image):
-    nifti_arrays = [nii_in.get_fdata() for nii_in in nii]
+    nifti_arrays = [nii_in.get_fdata(dtype=nii_in.get_data_dtype()) for nii_in in nii]
     return nib.Nifti1Image(np.sum(nifti_arrays, axis=0), affine=nii[0].affine)
 
+
+def scale_nii(nii:nib.Nifti1Image, factor):
+    return nib.Nifti1Image(nii.get_fdata(dtype=nii.get_data_dtype())*factor, affine=nii.affine)
 
 def calculate_err(input:nib.Nifti1Image, mask:nib.Nifti1Image, calc_std=True, calc_rmse=False, target_rmse=0):
     if np.prod(input.shape) != np.prod(mask.shape):  # input can be 4D but the last dimension must be 1
