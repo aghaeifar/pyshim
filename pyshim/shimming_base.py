@@ -45,7 +45,7 @@ def resample_to_standard_sapce(*niis, std_affine, std_size):
     niis_out = list()
     for nii_in in tqdm(niis, desc='resampling to standard space'):
         inter_method = 'nearest' if sorted(list(np.unique(nii_in.get_fdata()))) == [0, 1] else 'continuous'
-        niis_out.append(resample_img(nii_in, std_affine, std_size, interpolation=inter_method))
+        niis_out.append(resample_img(nii_in, target_affine=std_affine, target_shape=std_size, interpolation=inter_method))
     return niis_out
 
 
@@ -61,6 +61,7 @@ def combine_nii(*nii:nib.Nifti1Image):
 
 def scale_nii(nii:nib.Nifti1Image, factor):
     return nib.Nifti1Image(nii.get_fdata(dtype=nii.get_data_dtype())*factor, affine=nii.affine)
+
 
 def calculate_err(input:nib.Nifti1Image, mask:nib.Nifti1Image, calc_std=True, calc_rmse=False, target_rmse=0):
     if np.prod(input.shape) != np.prod(mask.shape):  # input can be 4D but the last dimension must be 1
