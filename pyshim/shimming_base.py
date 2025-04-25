@@ -45,7 +45,7 @@ def resample_to_standard_sapce(*niis, std_affine, std_size):
     niis_out = list()
     for nii_in in tqdm(niis, desc='resampling to standard space'):
         inter_method = 'nearest' if sorted(list(np.unique(nii_in.get_fdata()))) == [0, 1] else 'continuous'
-        niis_out.append(resample_img(nii_in, target_affine=std_affine, target_shape=std_size, interpolation=inter_method))
+        niis_out.append(resample_img(nii_in, target_affine=std_affine, target_shape=std_size, interpolation=inter_method, force_resample=True, copy_header=True))
     return niis_out
 
 
